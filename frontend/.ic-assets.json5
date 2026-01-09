@@ -1,0 +1,15 @@
+[
+  {
+    "match": "**/*",
+    "headers": {
+      "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; connect-src 'self' http://localhost:* http://127.0.0.1:* https://*.icp0.io https://*.icp-api.io https://*.ic0.app https://icp-api.io https://ic0.app; img-src 'self' data: blob: http://*.raw.localhost:4943 https://*.raw.icp0.io https://*.raw.ic0.app; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src 'self' https://*.ic0.app https://*.icp0.io; upgrade-insecure-requests"
+    },
+    "disable_security_policy_warning": true,
+    "allow_raw_access": true
+  },
+  {
+    // SPA fallback - enable aliasing so 404s redirect to index.html
+    "match": "**/*",
+    "enable_aliasing": true
+  }
+]

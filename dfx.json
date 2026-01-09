@@ -1,0 +1,46 @@
+{
+  "canisters": {
+    "icp_ledger_canister": {
+      "type": "custom",
+      "candid": "https://raw.githubusercontent.com/dfinity/ic/d87954601e4b22972899e9957e800406a0a6b929/rs/rosetta-api/icp_ledger/ledger.did",
+      "wasm": "https://download.dfinity.systems/ic/d87954601e4b22972899e9957e800406a0a6b929/canisters/ledger-canister_notify-method.wasm.gz",
+      "remote": {
+        "id": {
+          "ic": "ryjl3-tyaaa-aaaaa-aaaba-cai"
+        }
+      },
+      "init_arg": "(variant { Init = record { minting_account = \"14606ac5473d1857352e0ca2e753c34cef4b4301b89a47e5afbc951aac499d7c\"; initial_values = vec { record { \"674d2778ec2f45793ff9dc603f0c5045cd0a25eabbd5157c58241cd1f48e579a\"; record { e8s = 100_000_000_000 : nat64; }; }; }; send_whitelist = vec {}; transfer_fee = opt record { e8s = 10_000 : nat64; }; token_symbol = opt \"LICP\"; token_name = opt \"Local ICP\"; } })"
+    },
+    "internet_identity": {
+      "type": "custom",
+      "candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+      "wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_dev.wasm.gz",
+      "remote": {
+        "id": {
+          "ic": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+        }
+      },
+      "frontend": {}
+    },
+    "backend": {
+      "main": "backend/main.mo",
+      "type": "motoko",
+      "dependencies": [
+        "icp_ledger_canister"
+      ]
+    },
+    "frontend": {
+      "dependencies": [
+        "backend"
+      ],
+      "frontend": {
+        "entrypoint": "frontend/index.html"
+      },
+      "source": [
+        "frontend/dist"
+      ],
+      "type": "assets"
+    }
+  },
+  "output_env_file": ".env"
+}

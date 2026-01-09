@@ -1,0 +1,81 @@
+# Node and package managers
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# pnpm store
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+coverage/
+out/
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# DFINITY / Motoko / local canister state
+.dfx/
+dfx.json.local
+exports/
+icrc1_storage/
+
+# Motoko build artifacts and tests
+*.wasm
+*.mo.c
+*.mo.h
+*.mo.o
+*.mo.js
+*.mo.*.d
+
+# Frontend
+frontend/dist/
+frontend/build/
+frontend/.env
+frontend/node_modules/
+
+# Declarations and generated files (if you regenerate locally)
+src/declarations/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# macOS
+.DS_Store
+
+# Linux
+localtime
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+*.local
+
+# Certificates
+*.crt
+*.key
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Coverage reports
+coverage/
+
+# Misc
+.cache/
+/.turbo

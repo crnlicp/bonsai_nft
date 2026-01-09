@@ -1,0 +1,16 @@
+{
+  "name": "bonsai_nft",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "prebuild": "npm run prebuild --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present"
+  },
+  "type": "module",
+  "workspaces": [
+    "frontend"
+  ],
+  "devDependencies": {
+    "@types/node": "^25.0.3"
+  }
+}

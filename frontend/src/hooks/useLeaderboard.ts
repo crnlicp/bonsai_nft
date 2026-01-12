@@ -47,8 +47,7 @@ export const useLeaderboard = () => {
     const [timeRemaining, setTimeRemaining] = useState<bigint>(0n);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const { actor: authActor } = useIdentityKitAuth();
-    const { identityKitAgent } = useIdentityKitAuth();
+    const { actor: authActor, identityKitAgent, isAuthenticated, isActorAuthenticated } = useIdentityKitAuth();
     const [claimLoading, setClaimLoading] = useState(false);
 
     // Track if we're currently processing an airdrop to prevent duplicate calls
@@ -106,33 +105,30 @@ export const useLeaderboard = () => {
             setClaimLoading(true);
             setError(null);
 
-            // If we have an authenticated actor, ensure root key (local) and use it
-            let actorToUse: any = null;
-            if (authActor) {
-                // CRITICAL: Ensure root key is fetched for local dev BEFORE performing update call
-                // This prevents "Invalid certificate: Signature verification failed" errors
-                if (identityKitAgent && isLocal) {
-                    try {
-                        await ensureRootKeyFetched(identityKitAgent);
-                        // Try to access the underlying HttpAgent in multiple ways
-                        const httpAgent = (identityKitAgent as any).httpAgent ||
-                            (identityKitAgent as any)._httpAgent ||
-                            identityKitAgent;
-
-                        if (httpAgent && typeof httpAgent.fetchRootKey === 'function') {
-                            await httpAgent.fetchRootKey();
-                            console.log('✅ Root key fetched successfully for claim');
-                        }
-                    } catch (rootKeyErr) {
-                        console.log('Root key fetch skipped (may already be fetched):', rootKeyErr);
-                    }
-                }
-                actorToUse = authActor;
-            } else {
-                actorToUse = await createAnonymousActor();
+            // Update call: require authenticated actor
+            if (!authActor || !isAuthenticated || !isActorAuthenticated) {
+                return { success: false, message: 'Please connect your wallet to claim.' };
             }
 
-            const result = await (actorToUse as any).claimAirdrop(roundId, Array.from(accountId)) as { Ok?: string; Err?: string };
+            // CRITICAL: Ensure root key is fetched for local dev BEFORE performing update call
+            // This prevents "Invalid certificate: Signature verification failed" errors
+            if (identityKitAgent && isLocal) {
+                try {
+                    await ensureRootKeyFetched(identityKitAgent);
+                    const httpAgent = (identityKitAgent as any).httpAgent ||
+                        (identityKitAgent as any)._httpAgent ||
+                        identityKitAgent;
+
+                    if (httpAgent && typeof httpAgent.fetchRootKey === 'function') {
+                        await httpAgent.fetchRootKey();
+                        console.log('✅ Root key fetched successfully for claim');
+                    }
+                } catch (rootKeyErr) {
+                    console.log('Root key fetch skipped (may already be fetched):', rootKeyErr);
+                }
+            }
+
+            const result = await (authActor as any).claimAirdrop(roundId, Array.from(accountId)) as { Ok?: string; Err?: string };
 
             if ('Ok' in result && result.Ok) {
                 return { success: true, message: result.Ok };
@@ -167,8 +163,21 @@ export const useLeaderboard = () => {
         try {
             setLoading(true);
             setError(null);
-            const actor = await createAnonymousActor() as any;
-            const result = await actor.processAirdropIfReady() as { Ok?: string; Err?: string };
+
+            // Update call: require authenticated actor
+            if (!authActor || !isAuthenticated || !isActorAuthenticated) {
+                return { success: false, message: 'Not authenticated' };
+            }
+
+            if (identityKitAgent && isLocal) {
+                try {
+                    await ensureRootKeyFetched(identityKitAgent);
+                } catch (rootKeyErr) {
+                    console.log('Root key fetch skipped (may already be fetched):', rootKeyErr);
+                }
+            }
+
+            const result = await (authActor as any).processAirdropIfReady() as { Ok?: string; Err?: string };
 
             if ('Ok' in result && result.Ok) {
                 return { success: true, message: result.Ok };
@@ -212,12 +221,13 @@ export const useLeaderboard = () => {
                 const roundEnded = time === 0n;
                 const alreadyProcessedThisRound = roundId !== undefined && lastProcessedRoundRef.current === roundId;
 
-                console.log({leaderboard, time})
+                console.log({ leaderboard, time })
                 if (
                     hasEnoughParticipants &&
                     roundEnded &&
                     !isProcessingAirdropRef.current &&
-                    !alreadyProcessedThisRound
+                    !alreadyProcessedThisRound &&
+                    Boolean(authActor && isAuthenticated && isActorAuthenticated)
                 ) {
                     isProcessingAirdropRef.current = true;
 

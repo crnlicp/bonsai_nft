@@ -7,6 +7,87 @@ import Float "mo:base/Float";
 
 module {
     // =====================================================
+    // SECTION: ICRC-21 (Consent Messages)
+    // =====================================================
+    public type Icrc21ConsentMessageRequest = {
+        method : Text;
+        arg : Blob;
+        user_preferences : Icrc21ConsentMessageSpec;
+    };
+
+    public type Icrc21ConsentMessageSpec = {
+        metadata : Icrc21ConsentMessageMetadata;
+        device_spec : ?Icrc21DeviceSpec;
+    };
+
+    public type Icrc21ConsentMessageMetadata = {
+        language : Text;
+        utc_offset_minutes : ?Int16;
+    };
+
+    public type Icrc21DeviceSpec = {
+        #GenericDisplay;
+        #FieldsDisplay;
+    };
+
+    public type TextValue = {
+        content : Text;
+    };
+
+    public type TokenAmount = {
+        decimals : Nat8;
+        amount : Nat64;
+        symbol : Text;
+    };
+
+    public type TimestampSeconds = {
+        amount : Nat64;
+    };
+
+    public type DurationSeconds = {
+        amount : Nat64;
+    };
+
+    public type Icrc21Value = {
+        #TokenAmount : TokenAmount;
+        #TimestampSeconds : TimestampSeconds;
+        #DurationSeconds : DurationSeconds;
+        #Text : TextValue;
+    };
+
+    public type Icrc21ConsentMessage = {
+        #GenericDisplayMessage : Text;
+        #FieldsDisplayMessage : {
+            intent : Text;
+            fields : [(Text, Icrc21Value)];
+        };
+    };
+
+    public type Icrc21ConsentInfo = {
+        consent_message : Icrc21ConsentMessage;
+        metadata : Icrc21ConsentMessageMetadata;
+    };
+
+    public type Icrc21ErrorInfo = {
+        description : Text;
+    };
+
+    public type Icrc21Error = {
+        #UnsupportedCanisterCall : Icrc21ErrorInfo;
+        #ConsentMessageUnavailable : Icrc21ErrorInfo;
+        #InsufficientPayment : Icrc21ErrorInfo;
+        #GenericError : {
+            error_code : Nat;
+            description : Text;
+        };
+    };
+
+    public type Icrc21ConsentMessageResponse = {
+        #Ok : Icrc21ConsentInfo;
+        #Err : Icrc21Error;
+    };
+
+    // =====================================================
     // SECTION: ICRC-28 (Trusted Origins)
     // =====================================================
     public type Icrc28TrustedOriginsResponse = {

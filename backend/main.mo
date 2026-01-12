@@ -5,6 +5,7 @@ import Int "mo:base/Int";
 import Float "mo:base/Float";
 import Text "mo:base/Text";
 import Blob "mo:base/Blob";
+import Array "mo:base/Array";
 import Types "Types";
 import StorageManager "StorageManager";
 import NFTManager "NFTManager";
@@ -26,10 +27,20 @@ persistent actor BonsaiNFT {
     var treasuryAccountId : ?Blob = null;
     var treasuryBalance : Nat64 = 0;
     var useLocalhostImageUrl : Bool = false;
+    var testMode : Bool = false; // When true, skip payment verification for testing
 
     // --- Leaderboard State --------------------------------------------------
     var completedRounds : [Types.LeaderboardRound] = [];
     var claimedDistributions : [(Nat, [Principal])] = [];
+
+    // --- Trusted Origins State ----------------------------------------------
+    var trustedOrigins : [Text] = [
+        // Local development
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4943",
+        "http://127.0.0.1:4943",
+    ];
 
     // ========================================================================
     // TRANSIENT STABLE STORAGE
@@ -159,7 +170,13 @@ persistent actor BonsaiNFT {
 
     // Mint with verified ledger payment.
     public shared (msg) func mintBonsaiWithPayment(blockIndex : Nat64, memo : Nat64) : async Types.Result<Nat, Text> {
-        // Reject anonymous principal
+        // In test mode, skip all checks and allow anyone to mint
+        if (testMode) {
+            let res = await nftManager.mintBonsaiFree(msg.caller);
+            return res;
+        };
+
+        // Reject anonymous principal (only in production mode)
         if (Principal.isAnonymous(msg.caller)) {
             return #Err("Anonymous users cannot mint bonsais. Please authenticate first.");
         };
@@ -235,7 +252,13 @@ persistent actor BonsaiNFT {
     // Water bonsai with current balance for dynamic background color
     // Water with verified ledger payment + (optional) balance for visuals.
     public shared (msg) func waterBonsaiWithPayment(tokenId : Nat, currentBalanceE8s : Nat64, cost : Nat64, blockIndex : Nat64, memo : Nat64) : async Types.Result<(), Text> {
-        // Reject anonymous principal
+        // In test mode, skip all checks and allow anyone to water
+        if (testMode) {
+            let currentBalanceICP = Float.fromInt(Nat64.toNat(currentBalanceE8s)) / 100_000_000.0;
+            return await nftManager.waterBonsaiFree(msg.caller, tokenId, currentBalanceICP);
+        };
+
+        // Reject anonymous principal (only in production mode)
         if (Principal.isAnonymous(msg.caller)) {
             return #Err("Anonymous users cannot water bonsais. Please authenticate first.");
         };
@@ -267,6 +290,21 @@ persistent actor BonsaiNFT {
     // Get owner principal
     public query func getOwner() : async ?Principal {
         owner;
+    };
+
+    // Test mode accessors (for testing without payments)
+    public query func getTestMode() : async Bool {
+        testMode;
+    };
+
+    public shared (msg) func setTestMode(enabled : Bool) : async Types.Result<(), Text> {
+        switch (requireOwner(msg.caller)) {
+            case (#Err(err)) return #Err(err);
+            case (#Ok(())) {
+                testMode := enabled;
+                return #Ok(());
+            };
+        };
     };
 
     // Ledger canister accessors
@@ -541,23 +579,253 @@ persistent actor BonsaiNFT {
     };
 
     // ========================================================================
-    // ICRC-28 TRUSTED ORIGINS
+    // ICRC-10 SUPPORTED STANDARDS
+    // Lists all standards this canister implements
+    // ========================================================================
+    public query func icrc10_supported_standards() : async [{
+        name : Text;
+        url : Text;
+    }] {
+        [
+            {
+                name = "ICRC-7";
+                url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-7/ICRC-7.md";
+            },
+            {
+                name = "ICRC-21";
+                url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md";
+            },
+            {
+                name = "ICRC-28";
+                url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-28/ICRC-28.md";
+            },
+            {
+                name = "ICRC-37";
+                url = "https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-37/ICRC-37.md";
+            },
+        ];
+    };
+
+    // ========================================================================
+    // ADDITIONAL NFT METADATA METHODS
+    // For better wallet compatibility (Plug, etc.)
+    // ========================================================================
+
+    // Some wallets look for these conventional method names (DIP721-style)
+    // even if ICRC-7 is implemented.
+    public query func name() : async Text {
+        nftManager.icrc7_name();
+    };
+
+    public query func symbol() : async Text {
+        nftManager.icrc7_symbol();
+    };
+
+    // Get collection size
+    public query func totalSupply() : async Nat {
+        nftManager.icrc7_total_supply();
+    };
+
+    // Get token owner
+    public query func ownerOf(tokenId : Nat) : async ?Principal {
+        nftManager.icrc7_owner_of(tokenId);
+    };
+
+    // Get user's token balance
+    public query func balanceOf(owner : Principal) : async Nat {
+        nftManager.icrc7_balance_of({ owner = owner; subaccount = null });
+    };
+
+    // Wallet-friendly token list helpers
+    public query func tokens(owner : Principal) : async [Nat] {
+        nftManager.icrc7_tokens_of({ owner = owner; subaccount = null });
+    };
+
+    public query func getTokens(owner : Principal) : async [Nat] {
+        nftManager.icrc7_tokens_of({ owner = owner; subaccount = null });
+    };
+
+    // ERC-721-style metadata URI helper (commonly used by wallet UIs).
+    public query func tokenURI(tokenId : Nat) : async ?Text {
+        switch (nftManager.getBonsaiDetails(tokenId)) {
+            case (null) { null };
+            case (?_nft) {
+                let imageUrl = if (useLocalhostImageUrl) {
+                    "http://" # canisterId # ".raw.localhost:4943/nft/" # Nat.toText(tokenId) # ".svg";
+                } else {
+                    "https://" # canisterId # ".raw.icp0.io/nft/" # Nat.toText(tokenId) # ".svg";
+                };
+                ?imageUrl;
+            };
+        };
+    };
+
+    // Get token metadata (for Plug Wallet compatibility)
+    public query func tokenMetadata(tokenId : Nat) : async ?Types.TokenMetadata {
+        switch (nftManager.getBonsaiDetails(tokenId)) {
+            case (null) { null };
+            case (?nft) {
+                let score = nftManager.calculateScore(nft);
+                let canGrow = nft.growthTips.size() > 0;
+
+                let imageUrl = if (useLocalhostImageUrl) {
+                    "http://" # canisterId # ".raw.localhost:4943/nft/" # Nat.toText(nft.tokenId) # ".svg";
+                } else {
+                    "https://" # canisterId # ".raw.icp0.io/nft/" # Nat.toText(nft.tokenId) # ".svg";
+                };
+
+                ?{
+                    tokenId = nft.tokenId;
+                    name = "Bonsai #" # Nat.toText(nft.tokenId);
+                    description = "A unique procedurally-generated bonsai tree NFT. Water it to watch it grow!";
+                    image = imageUrl;
+                    properties = {
+                        score = score.total;
+                        age = score.age;
+                        branches = score.branches;
+                        foliage = score.foliage;
+                        growthSteps = nft.growthSteps;
+                        canGrow = canGrow;
+                    };
+                };
+            };
+        };
+    };
+
+    // ========================================================================
+    // ICRC-21 CONSENT MESSAGES
+    // For wallet integration (Oisy, etc.)
+    // ========================================================================
+    public query func icrc21_canister_call_consent_message(
+        request : Types.Icrc21ConsentMessageRequest
+    ) : async Types.Icrc21ConsentMessageResponse {
+        let language = request.user_preferences.metadata.language;
+        let utcOffset = request.user_preferences.metadata.utc_offset_minutes;
+
+        // Generate a user-friendly consent message based on the method being called
+        let consentMessage : Types.Icrc21ConsentMessage = switch (request.method) {
+            case ("mintBonsaiWithPayment") {
+                #GenericDisplayMessage(
+                    "Mint a new Bonsai NFT for 1 ICP. This will create a unique digital bonsai tree that you can grow and nurture."
+                );
+            };
+            case ("waterBonsaiWithPayment") {
+                #GenericDisplayMessage(
+                    "Water your Bonsai to help it grow. This action costs approximately 0.011 ICP and will add new branches and foliage."
+                );
+            };
+            case ("waterBonsai") {
+                #GenericDisplayMessage(
+                    "Water your Bonsai to help it grow. This will add new branches and foliage to your tree."
+                );
+            };
+            case ("burnBonsai") {
+                #GenericDisplayMessage(
+                    "⚠️ WARNING: This will permanently destroy your Bonsai NFT. This action cannot be undone."
+                );
+            };
+            case ("createMintInvoice") {
+                #GenericDisplayMessage(
+                    "Create a payment invoice for minting a new Bonsai NFT."
+                );
+            };
+            case ("createWaterInvoice") {
+                #GenericDisplayMessage(
+                    "Create a payment invoice for watering your Bonsai."
+                );
+            };
+            case ("claimAirdrop") {
+                #GenericDisplayMessage(
+                    "Claim your airdrop reward from the leaderboard round."
+                );
+            };
+            case ("processAirdropIfReady") {
+                #GenericDisplayMessage(
+                    "Process the current round and distribute airdrop rewards to winners."
+                );
+            };
+            case ("icrc37_transfer") {
+                #GenericDisplayMessage(
+                    "Transfer this Bonsai NFT to another owner."
+                );
+            };
+            case ("icrc37_approve") {
+                #GenericDisplayMessage(
+                    "Approve another principal to transfer this Bonsai NFT."
+                );
+            };
+            case _ {
+                // For unknown methods, indicate they might need consent
+                #GenericDisplayMessage(
+                    "Execute canister method: " # request.method
+                );
+            };
+        };
+
+        #Ok({
+            consent_message = consentMessage;
+            metadata = {
+                language = language;
+                utc_offset_minutes = utcOffset;
+            };
+        });
+    };
+
+    // ========================================================================
+    // ICRC-28 & ICRC-37 TRUSTED ORIGINS
     // For wallet integration (Plug, OISY, etc.)
     // ========================================================================
     public query func icrc28_trusted_origins() : async Types.Icrc28TrustedOriginsResponse {
         {
-            // Add your production frontend URLs here
-            trusted_origins = [
-                // Local development
-                "http://localhost:5173",
-                "http://127.0.0.1:5173",
-                "http://localhost:4943",
-                "http://127.0.0.1:4943",
-                // Production - update with your actual domain
-                // "https://your-frontend.icp0.io",
-                // "https://your-custom-domain.com"
-            ];
+            trusted_origins = trustedOrigins;
         };
+    };
+
+    // ICRC-37 also requires trusted origins for approval flows
+    public query func icrc37_trusted_origins() : async Types.Icrc28TrustedOriginsResponse {
+        {
+            trusted_origins = trustedOrigins;
+        };
+    };
+
+    // Admin method to add trusted origin
+    public shared (msg) func addTrustedOrigin(origin : Text) : async Types.Result<(), Text> {
+        switch (requireOwner(msg.caller)) {
+            case (#Err(e)) { #Err(e) };
+            case (#Ok()) {
+                // Check if already exists
+                for (existing in trustedOrigins.vals()) {
+                    if (existing == origin) {
+                        return #Err("Origin already exists in trusted origins list");
+                    };
+                };
+
+                // Add new origin
+                let buffer = Array.append<Text>(trustedOrigins, [origin]);
+                trustedOrigins := buffer;
+                #Ok(());
+            };
+        };
+    };
+
+    // Admin method to remove trusted origin
+    public shared (msg) func removeTrustedOrigin(origin : Text) : async Types.Result<(), Text> {
+        switch (requireOwner(msg.caller)) {
+            case (#Err(e)) { #Err(e) };
+            case (#Ok()) {
+                let filtered = Array.filter<Text>(trustedOrigins, func(o) { o != origin });
+                if (filtered.size() == trustedOrigins.size()) {
+                    return #Err("Origin not found in trusted origins list");
+                };
+                trustedOrigins := filtered;
+                #Ok(());
+            };
+        };
+    };
+
+    // Query method to list all trusted origins
+    public query func getTrustedOrigins() : async [Text] {
+        trustedOrigins;
     };
 
     // ========================================================================

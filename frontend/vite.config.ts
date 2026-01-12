@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   const isLocalNetwork = (env.DFX_NETWORK || 'local') !== 'ic';
 
   return {
-    base: './',
+    base: '/',
     plugins: [
       react(),
       environment('all', { prefix: 'CANISTER_' }),

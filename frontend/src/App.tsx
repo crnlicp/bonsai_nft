@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import { IdentityKitProvider, IdentityKitTheme } from '@nfid/identitykit/react';
 import { IdentityKitAuthType, NFIDW, InternetIdentity, Stoic, OISY } from '@nfid/identitykit';
 import '@nfid/identitykit/react/styles.css';
@@ -24,7 +24,7 @@ const localHost = 'http://127.0.0.1:4943';
 
 // Available signers (wallets)
 // Note: Plug and other extension wallets are auto-discovered via discoverExtensionSigners
-const signers = [NFIDW, InternetIdentity, Stoic, OISY];
+const signers = [NFIDW, InternetIdentity, OISY];
 
 function App() {
     return (
@@ -38,7 +38,7 @@ function App() {
             authType={IdentityKitAuthType.DELEGATION}
 
             // Featured signer mode (can be "compact" or "featured")
-            featuredSigner={NFIDW}
+            featuredSigner={false}
 
             // Theme configuration
             theme={IdentityKitTheme.SYSTEM} // LIGHT, DARK, or SYSTEM
@@ -70,9 +70,36 @@ function App() {
             }}
 
             // Event handlers
-            onConnectSuccess={() => console.log('✅ Wallet connected successfully')}
-            onConnectFailure={(error) => console.error('❌ Connection failed:', error)}
-            onDisconnect={() => console.log('👋 Wallet disconnected')}
+            onConnectSuccess={() => {
+                console.log('✅ Wallet connected successfully');
+                toast.success('Wallet connected successfully!');
+            }}
+            onConnectFailure={(error) => {
+                console.error('❌ Connection failed:', error);
+
+                // Provide helpful error messages based on the error
+                const errorMessage = error?.message || String(error);
+
+                if (errorMessage.includes('Cookies') || errorMessage.includes('cookie')) {
+                    toast.error(
+                        'Connection failed: Please enable cookies in your browser. ' +
+                        'For Brave users: Go to Settings > Shields and allow all cookies for this site.',
+                        { duration: 8000 }
+                    );
+                } else if (errorMessage.includes('Stoic') || errorMessage.includes('stoic')) {
+                    toast.error(
+                        'Stoic Wallet connection failed. Please ensure cookies are enabled and try again. ' +
+                        'Known issue with Brave browser - try using Chrome or Firefox.',
+                        { duration: 8000 }
+                    );
+                } else {
+                    toast.error(`Connection failed: ${errorMessage}`, { duration: 6000 });
+                }
+            }}
+            onDisconnect={() => {
+                console.log('👋 Wallet disconnected');
+                toast('Wallet disconnected');
+            }}
         >
             <Toaster
                 position="bottom-right"

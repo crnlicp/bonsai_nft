@@ -8,7 +8,7 @@ import WalletConnect from '../components/WalletConnect';
 
 const Home = () => {
     const navigate = useNavigate();
-    const { isAuthenticated } = useIdentityKitAuth();
+    const { isAuthenticated, actorLoading } = useIdentityKitAuth();
     const { mintBonsai, loading } = useBonsai();
     const { balance, formatICP } = useBalance();
     const [error, setError] = useState('');
@@ -21,7 +21,7 @@ const Home = () => {
 
         try {
             setError('');
-            const tokenId = await mintBonsai();
+            await mintBonsai();
             // Redirect to My Bonsais page instead of directly to bonsai detail
             // This avoids race condition where ownership hasn't been indexed yet
             toast.success('🌱 Bonsai minted successfully! View it in My Bonsais.');
@@ -30,6 +30,9 @@ const Home = () => {
             setError(err.message);
         }
     };
+
+    // Show wallet connected but actor still loading
+    const walletConnectedButLoading = isAuthenticated && actorLoading;
 
     return (
         <>
@@ -56,11 +59,18 @@ const Home = () => {
                         </div>
                         <button
                             onClick={handleMint}
-                            disabled={loading}
+                            disabled={loading || walletConnectedButLoading}
                             className="btn-primary text-xl py-4 px-12"
                         >
-                            {loading ? 'Minting...' : '🌱 Mint Me a Bonsai - 1 ICP'}
+                            {walletConnectedButLoading
+                                ? 'Initializing...'
+                                : loading
+                                    ? 'Minting...'
+                                    : '🌱 Mint Me a Bonsai - 1 ICP'}
                         </button>
+                        {walletConnectedButLoading && (
+                            <p className="text-sm text-gray-500">Setting up your connection...</p>
+                        )}
                     </div>
                 ) : (
                     <div className="flex flex-col items-center space-y-6">

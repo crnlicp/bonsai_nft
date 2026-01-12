@@ -33,34 +33,71 @@ export interface TokenMetadata {
 }
 
 export const useBonsai = () => {
-    const { actor, principal, isAuthenticated, isActorAuthenticated } = useIdentityKitAuth();
+    const { actor: updateActor, queryActor, principal, isAuthenticated, isActorAuthenticated } = useIdentityKitAuth();
     const { transferToBackend, balance, fetchBalance } = useBalance();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [testMode, setTestMode] = useState<boolean | null>(null);
 
-    // Mint with direct ICP payment
-    const mintBonsai = async () => {
-        if (!actor || !isAuthenticated || !isActorAuthenticated) {
+    const assertAuthenticatedUpdate = () => {
+        if (!updateActor || !isAuthenticated || !isActorAuthenticated) {
             throw new Error('Please connect your wallet first');
         }
 
         // Extra safety: Check that we're not using the anonymous principal
         const ANONYMOUS_PRINCIPAL = '2vxsx-fae';
-        if (principal?.toText() === ANONYMOUS_PRINCIPAL) {
-            throw new Error('Cannot mint with anonymous identity. Please connect your wallet.');
+        if (principal?.toText?.() === ANONYMOUS_PRINCIPAL || principal?.toString?.() === ANONYMOUS_PRINCIPAL) {
+            throw new Error('Cannot perform this action with anonymous identity. Please connect your wallet.');
         }
+    };
 
-        // Check if user has enough balance
-        if (balance < MINT_COST + BigInt(10_000)) { // Include fee
-            throw new Error('Insufficient ICP balance. You need at least 1.0001 ICP to mint.');
+    // Check if test mode is enabled on backend
+    const checkTestMode = async () => {
+        const actorForRead = queryActor || updateActor;
+        if (!actorForRead) return false;
+        try {
+            const isTestMode = await actorForRead.getTestMode();
+            setTestMode(isTestMode);
+            return isTestMode;
+        } catch (err) {
+            console.error('Failed to check test mode:', err);
+            return false;
         }
+    };
+
+    // Mint with direct ICP payment
+    const mintBonsai = async () => {
+        assertAuthenticatedUpdate();
 
         setLoading(true);
         setError(null);
 
         try {
+            // Check if test mode is enabled
+            const isTestMode = await checkTestMode();
+
+            if (isTestMode) {
+                // In test mode, skip payment and directly mint
+                toast.loading('Minting your Bonsai (Test Mode)...', { id: 'mint' });
+                const result = await updateActor.mintBonsaiWithPayment(BigInt(0), BigInt(0));
+
+                if ('Ok' in result) {
+                    toast.success('Bonsai minted successfully! (Test Mode - No payment required)', { id: 'mint' });
+                    await fetchBalance();
+                    return result.Ok;
+                } else {
+                    throw new Error(result.Err);
+                }
+            }
+
+            // Normal payment flow (not in test mode)
+            // Check if user has enough balance
+            if (balance < MINT_COST + BigInt(10_000)) { // Include fee
+                throw new Error('Insufficient ICP balance. You need at least 1.0001 ICP to mint.');
+            }
+
             // Step 0: Create invoice memo (used as Ledger transfer memo)
-            const memoResult = await actor.createMintInvoice();
+            const memoResult = await updateActor.createMintInvoice();
             if (!('Ok' in memoResult)) {
                 throw new Error(memoResult.Err);
             }
@@ -72,7 +109,7 @@ export const useBonsai = () => {
 
             // Step 2: Confirm payment on-canister + mint
             toast.loading('Minting your Bonsai...', { id: 'mint' });
-            const result = await actor.mintBonsaiWithPayment(blockIndex, memo);
+            const result = await updateActor.mintBonsaiWithPayment(blockIndex, memo);
 
             if ('Ok' in result) {
                 toast.success('Bonsai minted successfully!', { id: 'mint' });
@@ -93,31 +130,41 @@ export const useBonsai = () => {
     // Water with direct ICP payment
     // customCost is used for auto-grow with random amounts
     const waterBonsai = async (tokenId: bigint, customCost?: bigint) => {
-        if (!actor || !isAuthenticated || !isActorAuthenticated) {
-            throw new Error('Please connect your wallet first');
-        }
-
-        // Extra safety: Check that we're not using the anonymous principal
-        const ANONYMOUS_PRINCIPAL = '2vxsx-fae';
-        if (principal?.toText() === ANONYMOUS_PRINCIPAL) {
-            throw new Error('Cannot water with anonymous identity. Please connect your wallet.');
-        }
+        assertAuthenticatedUpdate();
 
         // Use custom cost for auto-grow, or fixed cost for regular watering
         const costToUse = customCost || WATER_COST;
         const waterCostICP = Number(costToUse) / 100_000_000;
 
-        // Check if user has enough balance
-        if (balance < costToUse + BigInt(10_000)) { // Include fee
-            throw new Error(`Insufficient ICP balance. You need at least ${waterCostICP.toFixed(8)} ICP to water.`);
-        }
-
         setLoading(true);
         setError(null);
 
         try {
+            // Check if test mode is enabled
+            const isTestMode = await checkTestMode();
+
+            if (isTestMode) {
+                // In test mode, skip payment and directly water
+                toast.loading('Watering your Bonsai (Test Mode)...', { id: 'water' });
+                const result = await updateActor.waterBonsaiWithPayment(tokenId, balance, BigInt(0), BigInt(0), BigInt(0));
+
+                if ('Ok' in result) {
+                    toast.success('Bonsai watered! It grew a little 🌱 (Test Mode - No payment required)', { id: 'water' });
+                    await fetchBalance();
+                    return true;
+                } else {
+                    throw new Error(result.Err);
+                }
+            }
+
+            // Normal payment flow (not in test mode)
+            // Check if user has enough balance
+            if (balance < costToUse + BigInt(10_000)) { // Include fee
+                throw new Error(`Insufficient ICP balance. You need at least ${waterCostICP.toFixed(8)} ICP to water.`);
+            }
+
             // Step 0: Create invoice memo
-            const invoiceResult = await actor.createWaterInvoice(tokenId, costToUse);
+            const invoiceResult = await updateActor.createWaterInvoice(tokenId, costToUse);
             if (!('Ok' in invoiceResult)) {
                 throw new Error(invoiceResult.Err);
             }
@@ -133,7 +180,7 @@ export const useBonsai = () => {
 
             // Step 2: Confirm payment on-canister + water (balance is for visuals)
             toast.loading('Watering your Bonsai...', { id: 'water' });
-            const result = await actor.waterBonsaiWithPayment(tokenId, currentBalanceE8s, costToUse, blockIndex, memo);
+            const result = await updateActor.waterBonsaiWithPayment(tokenId, currentBalanceE8s, costToUse, blockIndex, memo);
 
             if ('Ok' in result) {
                 toast.success('Bonsai watered! It grew a little 🌱', { id: 'water' });
@@ -152,15 +199,13 @@ export const useBonsai = () => {
     };
 
     const burnBonsai = async (tokenId: bigint) => {
-        if (!actor || !isAuthenticated) {
-            throw new Error('Please connect your wallet first');
-        }
+        assertAuthenticatedUpdate();
 
         setLoading(true);
         setError(null);
 
         try {
-            const result = await actor.burnBonsai(tokenId);
+            const result = await updateActor.burnBonsai(tokenId);
             if ('Ok' in result) {
                 return true;
             } else {
@@ -175,10 +220,11 @@ export const useBonsai = () => {
     };
 
     const getBonsaiDetails = async (tokenId: bigint): Promise<BonsaiNFT | null> => {
-        if (!actor) return null;
+        const actorForRead = queryActor || updateActor;
+        if (!actorForRead) return null;
 
         try {
-            const result = await actor.getBonsaiDetails(tokenId);
+            const result = await actorForRead.getBonsaiDetails(tokenId);
             return result.length > 0 ? result[0] : null;
         } catch (err) {
             console.error('Failed to get bonsai details:', err);
@@ -187,10 +233,11 @@ export const useBonsai = () => {
     };
 
     const getMyBonsais = async (): Promise<TokenMetadata[]> => {
-        if (!actor || !principal) return [];
+        const actorForRead = queryActor || updateActor;
+        if (!actorForRead || !principal) return [];
 
         try {
-            return await actor.getMyBonsais(principal);
+            return await actorForRead.getMyBonsais(principal);
         } catch (err) {
             console.error('Failed to get my bonsais:', err);
             return [];
@@ -198,10 +245,11 @@ export const useBonsai = () => {
     };
 
     const getGallery = async (offset: bigint, limit: bigint): Promise<TokenMetadata[]> => {
-        if (!actor) return [];
+        const actorForRead = queryActor || updateActor;
+        if (!actorForRead) return [];
 
         try {
-            return await actor.getGallery(offset, limit);
+            return await actorForRead.getGallery(offset, limit);
         } catch (err) {
             console.error('Failed to get gallery:', err);
             return [];
@@ -209,9 +257,7 @@ export const useBonsai = () => {
     };
 
     const transferBonsai = async (tokenId: bigint, to: string) => {
-        if (!actor || !isAuthenticated) {
-            throw new Error('Please connect your wallet first');
-        }
+        assertAuthenticatedUpdate();
 
         setLoading(true);
         setError(null);
@@ -220,7 +266,7 @@ export const useBonsai = () => {
             // Convert string to Principal
             const toPrincipal = Principal.fromText(to);
 
-            const result = await actor.icrc37_transfer({
+            const result = await updateActor.icrc37_transfer({
                 from_subaccount: [],
                 to: { owner: toPrincipal, subaccount: [] },
                 token_id: tokenId,
@@ -251,5 +297,7 @@ export const useBonsai = () => {
         transferBonsai,
         loading,
         error,
+        testMode,
+        checkTestMode,
     };
 };

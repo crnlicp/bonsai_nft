@@ -1,15 +1,28 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useIdentityKitAuth } from '../hooks/useIdentityKitAuth';
+import { useBonsai } from '../hooks/useBonsai';
 import WalletConnect from './WalletConnect';
 import UserMenu from './UserMenu';
 
 const Header = () => {
     const { isAuthenticated } = useIdentityKitAuth();
+    const { testMode, checkTestMode } = useBonsai();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    useEffect(() => {
+        // Check test mode when component mounts
+        checkTestMode();
+    }, []);
 
     return (
         <header className="border-b border-dark-border">
+            {/* Test Mode Banner */}
+            {testMode && (
+                <div className="bg-yellow-600 text-black text-center py-2 px-4 text-sm font-semibold">
+                    ⚠️ TEST MODE ACTIVE - No payments required (for testing only)
+                </div>
+            )}
             <div className="max-w-7xl mx-auto px-4 py-4">
                 <div className="flex justify-between items-center">
                     <Link to="/" className="text-2xl font-bold text-primary">

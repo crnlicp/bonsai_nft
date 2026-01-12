@@ -11,7 +11,7 @@ import Statistics from '@/components/Statistics';
 
 const BonsaiDetail = () => {
     const { id } = useParams<{ id: string }>();
-    const { principal, actor, actorLoading } = useIdentityKitAuth();
+    const { principal, actor, queryActor, actorLoading } = useIdentityKitAuth();
     const { getBonsaiDetails, waterBonsai } = useBonsai();
     const { balance, fetchBalance } = useBalance();
     const [bonsai, setBonsai] = useState<BonsaiNFT | null>(null);
@@ -23,8 +23,9 @@ const BonsaiDetail = () => {
     const shouldStopRef = useRef(false);
 
     useEffect(() => {
-        // Wait for actor to be ready
-        if (actorLoading || !actor) {
+        // Read-only view should not depend on the authenticated actor being ready
+        const actorForRead: any = queryActor || actor;
+        if (!actorForRead) {
             setLoading(true);
             return;
         }
@@ -37,10 +38,11 @@ const BonsaiDetail = () => {
                 clearTimeout(autoGrowIntervalRef.current);
             }
         };
-    }, [id, actor, actorLoading]);
+    }, [id, actor, actorLoading, queryActor]);
 
     const loadBonsai = async () => {
-        if (!id || !actor) return;
+        const actorForRead: any = queryActor || actor;
+        if (!id || !actorForRead) return;
 
         // Only show full loading screen on initial load
         if (initialLoad) {
@@ -51,16 +53,18 @@ const BonsaiDetail = () => {
 
         // Load metadata with canGrow field
         try {
-            const myBonsais = await actor.getMyBonsais(principal!);
-            const thisBonsai = myBonsais.find((b: any) => Number(b.tokenId) === Number(id));
-            if (thisBonsai) {
-                setMetadata({
-                    tokenId: thisBonsai.tokenId,
-                    name: thisBonsai.name,
-                    description: thisBonsai.description,
-                    image: thisBonsai.image,
-                    properties: thisBonsai.properties
-                });
+            if (principal) {
+                const myBonsais = await actorForRead.getMyBonsais(principal);
+                const thisBonsai = myBonsais.find((b: any) => Number(b.tokenId) === Number(id));
+                if (thisBonsai) {
+                    setMetadata({
+                        tokenId: thisBonsai.tokenId,
+                        name: thisBonsai.name,
+                        description: thisBonsai.description,
+                        image: thisBonsai.image,
+                        properties: thisBonsai.properties
+                    });
+                }
             }
         } catch (e) {
             console.error('Failed to load metadata:', e);
@@ -76,7 +80,10 @@ const BonsaiDetail = () => {
     const isOwner = principal && bonsai && principal.toString() === bonsai.owner.toString();
 
     const handleAutoGrow = async () => {
-        if (!id || !actor || !principal) return;
+        if (!id || !principal) return;
+
+        const actorForRead: any = queryActor || actor;
+        if (!actorForRead) return;
 
         if (autoGrowing) {
             // Stop auto-grow
@@ -124,7 +131,7 @@ const BonsaiDetail = () => {
                 }
 
                 // Check if tree can still grow (AFTER watering)
-                const currentMeta = await actor.getMyBonsais(principal);
+                const currentMeta = await actorForRead.getMyBonsais(principal);
                 const thisBonsai = currentMeta.find((b: any) => Number(b.tokenId) === Number(id));
 
                 if (!thisBonsai?.properties?.canGrow) {

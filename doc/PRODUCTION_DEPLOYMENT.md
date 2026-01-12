@@ -77,27 +77,20 @@ dfx canister --network ic call backend getLedgerCanisterId
 # Expected: (principal "ryjl3-tyaaa-aaaaa-aaaba-cai")
 ```
 
-### 4. Update ICRC-28 Trusted Origins
+### 4. Configure ICRC-28/ICRC-37 Trusted Origins
 
-Edit `backend/main.mo` and update the trusted origins with your actual frontend URLs:
+Trusted origins are required for Plug, OISY, and other wallet flows.
 
-```motoko
-public query func icrc28_trusted_origins() : async Types.Icrc28TrustedOriginsResponse {
-    {
-        trusted_origins = [
-            "https://YOUR_CANISTER_ID.icp0.io",  // Update this
-            "https://YOUR_CANISTER_ID.ic0.app",  // Update this
-            "https://your-custom-domain.com"      // Add your domain
-        ];
-    };
-};
-```
-
-Then rebuild and upgrade:
+This project now updates trusted origins as part of the IC deployment script:
 
 ```bash
-dfx build --network ic backend
-dfx canister --network ic install backend --mode upgrade
+./deploy.sh --ic
+```
+
+To add a custom domain, pass it during deploy (repeatable):
+
+```bash
+./deploy.sh --ic --origin https://your-custom-domain.com
 ```
 
 ### 5. Verify Configuration

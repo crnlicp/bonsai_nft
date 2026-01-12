@@ -1,9 +1,13 @@
 #!/bin/bash
 
 # Deployment script for Bonsai NFT project
-# Usage: ./deploy.sh [--ic]
-#   ./deploy.sh        - Deploy to local replica
-#   ./deploy.sh --ic   - Deploy to IC mainnet
+# Usage:
+#   ./deploy.sh
+#     Deploy to local replica
+#   ./deploy.sh --ic
+#     Deploy to IC mainnet
+#   ./deploy.sh --ic --origin https://your.custom.domain
+#     Deploy to IC mainnet and add extra trusted origin(s) (repeatable)
 
 set -e
 
@@ -17,19 +21,39 @@ NC='\033[0m' # No Color
 # Parse arguments
 NETWORK="local"
 NETWORK_FLAG=""
+EXTRA_TRUSTED_ORIGINS=()
 
-if [ "$1" == "--ic" ]; then
-    NETWORK="ic"
-    NETWORK_FLAG="--network ic"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --ic)
+            NETWORK="ic"
+            NETWORK_FLAG="--network ic"
+            shift
+            ;;
+        --origin)
+            if [ -z "$2" ]; then
+                echo -e "${RED}Error: --origin requires a URL value${NC}"
+                exit 1
+            fi
+            EXTRA_TRUSTED_ORIGINS+=("$2")
+            shift 2
+            ;;
+        *)
+            echo -e "${RED}Unknown argument: $1${NC}"
+            exit 1
+            ;;
+    esac
+done
+
+if [ "$NETWORK" == "ic" ]; then
     echo -e "${BLUE}Deploying to IC mainnet...${NC}"
-    
+
     # Pre-deployment security check for IC
     echo -e "\n${RED}⚠️  CRITICAL SECURITY CHECK${NC}"
     echo -e "${YELLOW}Before deploying to IC mainnet, ensure you:${NC}"
-    echo -e "  1. Have updated ICRC-28 trusted origins in backend/main.mo"
-    echo -e "  2. Are ready to set owner IMMEDIATELY after deployment"
-    echo -e "  3. Have your dfx identity backed up securely"
-    echo -e "  4. Have sufficient cycles (check: dfx cycles balance --network ic)"
+    echo -e "  1. Are ready to set owner IMMEDIATELY after deployment"
+    echo -e "  2. Have your dfx identity backed up securely"
+    echo -e "  3. Have sufficient cycles (check: dfx cycles balance --network ic)"
     echo -e "\n${RED}Press CTRL+C to cancel, or any key to continue...${NC}"
     read -n 1 -s
     echo ""
@@ -57,6 +81,9 @@ else
     dfx deploy $NETWORK_FLAG
 fi
 
+# Capture frontend canister id early (used for IC trusted origins and URLs)
+FRONTEND_CANISTER=$(dfx canister $NETWORK_FLAG id frontend)
+
 # Step 2: Get deployer's principal
 echo -e "\n${YELLOW}Step 2: Getting deployer identity...${NC}"
 PRINCIPAL=$(dfx identity get-principal)
@@ -69,6 +96,34 @@ if [ "$NETWORK" == "ic" ]; then
 fi
 dfx canister $NETWORK_FLAG call backend setOwner "(principal \"$PRINCIPAL\")"
 echo -e "${GREEN}✓ Owner set successfully${NC}"
+
+# Step 3.5: Add ICRC-28/ICRC-37 trusted origins (IC only)
+if [ "$NETWORK" == "ic" ]; then
+    echo -e "\n${YELLOW}Step 3.5: Adding trusted origins (ICRC-28/ICRC-37)...${NC}"
+
+    DEFAULT_TRUSTED_ORIGINS=(
+        "https://$FRONTEND_CANISTER.icp0.io"
+        "https://$FRONTEND_CANISTER.ic0.app"
+    )
+
+    echo -e "${BLUE}Adding default frontend origins:${NC}"
+    for origin in "${DEFAULT_TRUSTED_ORIGINS[@]}"; do
+        echo -e "  ${BLUE}- ${origin}${NC}"
+        dfx canister --network ic call backend addTrustedOrigin "(\"$origin\")" >/dev/null || true
+    done
+
+    if [ ${#EXTRA_TRUSTED_ORIGINS[@]} -gt 0 ]; then
+        echo -e "${BLUE}Adding extra origins from --origin:${NC}"
+        for origin in "${EXTRA_TRUSTED_ORIGINS[@]}"; do
+            echo -e "  ${BLUE}- ${origin}${NC}"
+            dfx canister --network ic call backend addTrustedOrigin "(\"$origin\")" >/dev/null || true
+        done
+    fi
+
+    echo -e "${BLUE}Current trusted origins:${NC}"
+    dfx canister --network ic call backend getTrustedOrigins
+    echo -e "${GREEN}✓ Trusted origins updated${NC}"
+fi
 
 # Step 4: Get backend canister's account ID for treasury
 echo -e "\n${YELLOW}Step 4: Setting up treasury account...${NC}"
@@ -139,7 +194,7 @@ if [ "$NETWORK" == "local" ]; then
     dfx canister call backend getUseLocalhostImageUrl
 fi
 
-# Step 8: IC Mainnet Post-Deployment Configuration
+# Step 8: IC Mainnet Post-Deployment Notes
 if [ "$NETWORK" == "ic" ]; then
     # Display cycles status
     echo -e "\n${BLUE}Checking canister cycles...${NC}"
@@ -148,28 +203,19 @@ if [ "$NETWORK" == "ic" ]; then
     echo -e "${GREEN}Backend cycles: $BACKEND_CYCLES${NC}"
     echo -e "${GREEN}Frontend cycles: $FRONTEND_CYCLES${NC}"
     echo -e "${YELLOW}Note: Upgrades consume from canister balance, not your identity${NC}"
-    
+
     echo -e "\n${RED}========================================${NC}"
-    echo -e "${RED}IC MAINNET POST-DEPLOYMENT REQUIRED${NC}"
+    echo -e "${RED}IC MAINNET POST-DEPLOYMENT NOTES${NC}"
     echo -e "${RED}========================================${NC}"
-    echo -e "\n${YELLOW}⚠️  IMPORTANT: Update ICRC-28 Trusted Origins${NC}"
-    echo -e "${BLUE}1. Edit backend/main.mo - function icrc28_trusted_origins()${NC}"
-    echo -e "${BLUE}2. Replace localhost URLs with:${NC}"
-    echo -e "   - https://$FRONTEND_CANISTER.icp0.io"
-    echo -e "   - https://$FRONTEND_CANISTER.ic0.app"
-    echo -e "   - (add your custom domain if applicable)"
-    echo -e "\n${BLUE}3. Rebuild and upgrade:${NC}"
-    echo -e "   dfx build --network ic backend"
-    echo -e "   dfx canister --network ic install backend --mode upgrade"
-    echo -e "\n${YELLOW}This is required for Plug, OISY, and other wallets to work!${NC}"
+    echo -e "\n${YELLOW}Trusted origins were updated during deploy.${NC}"
+    echo -e "${BLUE}If you use a custom domain, rerun deploy with:${NC}"
+    echo -e "  ./deploy.sh --ic --origin https://your.custom.domain"
 fi
 
 # Step 9: Display canister URLs
 echo -e "\n${GREEN}========================================${NC}"
 echo -e "${GREEN}Deployment successful!${NC}"
 echo -e "${GREEN}========================================${NC}"
-
-FRONTEND_CANISTER=$(dfx canister $NETWORK_FLAG id frontend)
 
 echo -e "\n${BLUE}Backend Canister ID:${NC} $BACKEND_CANISTER"
 echo -e "${BLUE}Frontend Canister ID:${NC} $FRONTEND_CANISTER"

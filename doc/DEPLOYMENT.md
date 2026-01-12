@@ -82,6 +82,18 @@ When deploying to mainnet:
 
 ### Deploy to mainnet:
 
+Recommended: use the provided deployment script, which sets owner/treasury and updates ICRC-28/ICRC-37 trusted origins automatically:
+
+```bash
+./deploy.sh --ic
+```
+
+If you use a custom domain, add it as an extra trusted origin during deploy:
+
+```bash
+./deploy.sh --ic --origin https://your-custom-domain.com
+```
+
 ```bash
 dfx deploy --network ic backend
 

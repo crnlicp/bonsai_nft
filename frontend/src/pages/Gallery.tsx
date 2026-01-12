@@ -6,15 +6,15 @@ import BonsaiCard from '../components/BonsaiCard';
 
 const Gallery = () => {
     const { getGallery } = useBonsai();
-    const { actor, actorLoading } = useIdentityKitAuth();
+    const { queryActor } = useIdentityKitAuth();
     const [bonsais, setBonsais] = useState<TokenMetadata[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(0);
     const pageSize = 20;
 
     useEffect(() => {
-        // Wait for actor to be ready (works for both authenticated and anonymous users)
-        if (actorLoading || !actor) {
+        // Wait for the anonymous query actor (read-only calls shouldn't depend on wallet init)
+        if (!queryActor) {
             setLoading(true);
             return;
         }
@@ -31,9 +31,9 @@ const Gallery = () => {
         };
 
         loadGallery();
-        // Only depend on page and actor - getGallery is stable through actor
+        // Only depend on page and queryActor - getGallery is stable through hook
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page, actorLoading, actor]);
+    }, [page, queryActor]);
 
     return (
         <>

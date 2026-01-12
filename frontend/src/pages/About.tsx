@@ -263,6 +263,52 @@ const About = () => {
                 </div>
             </section>
 
+            {/* Wallet Compatibility */}
+            <section className="card mb-8">
+                <h2 className="text-2xl font-bold mb-4 text-primary">👛 Wallet Compatibility</h2>
+
+                <div className="space-y-4">
+                    <p className="text-gray-300">
+                        Bonsai NFT supports all major Internet Computer wallets including:
+                    </p>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <div className="bg-dark-bg p-4 rounded-lg">
+                            <h3 className="font-semibold text-green-400 mb-2">✅ Fully Supported</h3>
+                            <ul className="text-gray-300 space-y-1">
+                                <li>• NFID Wallet (Recommended)</li>
+                                <li>• Internet Identity</li>
+                                <li>• Plug Wallet</li>
+                                <li>• Oisy Wallet (read-only works smoothly)</li>
+                            </ul>
+                        </div>
+
+                        <div className="bg-dark-bg p-4 rounded-lg">
+                            <h3 className="font-semibold text-yellow-400 mb-2">⚠️ Known Issues</h3>
+                            <ul className="text-gray-300 space-y-1">
+                                <li>• Oisy Wallet: will prompt approvals for write actions (mint, water, transfer, claim)</li>
+                                <li>• Stoic Wallet: Requires cookies enabled</li>
+                                <li>• Brave Browser: May block cookies</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mt-4">
+                        <h4 className="font-semibold text-yellow-400 mb-2">💡 Troubleshooting Stoic Wallet</h4>
+                        <p className="text-gray-300 text-sm mb-2">
+                            If you encounter connection errors with Stoic Wallet:
+                        </p>
+                        <ol className="text-gray-300 text-sm space-y-1 ml-4 list-decimal">
+                            <li>Ensure cookies are enabled in your browser settings</li>
+                            <li>For Brave users: Go to Settings → Shields → Allow all cookies for this site</li>
+                            <li>Try using Chrome or Firefox browsers</li>
+                            <li>Clear your browser cache and try again</li>
+                            <li>Consider using NFID or Internet Identity as alternatives</li>
+                        </ol>
+                    </div>
+                </div>
+            </section>
+
             {/* Get Started */}
             <div className="text-center mt-8">
                 <Link to="/" className="btn-primary inline-block px-8 py-3 text-lg">

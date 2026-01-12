@@ -34,9 +34,12 @@ export const useIdentityKitAuth = () => {
     const isAuthenticated = !!user;
     const principal = user?.principal || null;
 
-    // Create actor using the IdentityKit agent
+    // Create actors:
+    // - queryActor: always anonymous (no wallet popups, safe for query methods)
+    // - actor: authenticated when available, else anonymous
     // For local development, we need to ensure root key is fetched
     const [actor, setActor] = useState<any>(null);
+    const [queryActor, setQueryActor] = useState<any>(null);
     const [actorLoading, setActorLoading] = useState(true);
     const [isActorAuthenticated, setIsActorAuthenticated] = useState(false);
     const [rootKeyFetched, setRootKeyFetched] = useState(!isLocal);
@@ -53,17 +56,34 @@ export const useIdentityKitAuth = () => {
         fetchRootKey();
     }, [identityKitAgent, rootKeyFetched]);
 
-    // Create actor when agent is ready and root key is fetched (in local mode)
-    // Create authenticated actor when available, otherwise anonymous for read-only operations
+    // Create actors when agent is ready and root key is fetched (in local mode)
+    // IMPORTANT: For wallets that don't support delegations (e.g., Oisy), using the
+    // authenticated agent for query calls can still trigger approval popups.
+    // Therefore, we always create an anonymous queryActor for read-only operations.
     useEffect(() => {
         if (!BACKEND_CANISTER_ID) {
             setActor(null);
+            setQueryActor(null);
             setActorLoading(false);
             return;
         }
 
         const createActor = async () => {
             setActorLoading(true);
+
+            // Always create an anonymous agent/actor for query calls
+            // (avoids wallet prompts for simple reads)
+            try {
+                const anonymousAgent = await createConfiguredAgent();
+                const newQueryActor = Actor.createActor(backendIdl, {
+                    agent: anonymousAgent,
+                    canisterId: BACKEND_CANISTER_ID,
+                });
+                setQueryActor(newQueryActor);
+            } catch (error) {
+                console.error('Failed to create anonymous query actor:', error);
+                setQueryActor(null);
+            }
 
             let agentToUse: any = identityKitAgent;
             let isAuthenticatedActor = false;
@@ -79,7 +99,8 @@ export const useIdentityKitAuth = () => {
                     return;
                 }
             } else {
-                isAuthenticatedActor = true;
+                // Only treat as authenticated if the user is connected
+                isAuthenticatedActor = Boolean(user);
             }
 
             // For local with authenticated agent, wait until root key is fetched
@@ -98,7 +119,7 @@ export const useIdentityKitAuth = () => {
         };
 
         createActor();
-    }, [identityKitAgent, rootKeyFetched]);
+    }, [identityKitAgent, rootKeyFetched, user]);
 
     return {
         // Authentication state
@@ -108,6 +129,8 @@ export const useIdentityKitAuth = () => {
 
         // Actor for backend calls
         actor,
+        queryActor,
+        updateActor: actor,
         actorLoading,
         isActorAuthenticated, // Flag to check if actor is using authenticated identity
 

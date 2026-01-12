@@ -1127,7 +1127,7 @@ module {
         };
     };
 
-    public func buildOptimizedSVG(walletBalance : Float, growthPixels : [Types.Pixel]) : Text {
+    public func buildOptimizedSVG(walletBalance : Float, growthPixels : [Types.Pixel], title : Text) : Text {
         // Extract digits once and use for both tree growth pattern and background color
         let digits = getGrowthDigits(walletBalance);
         let bgColor = getBackgroundColor(digits);
@@ -1157,6 +1157,9 @@ module {
         var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 " #
         Nat.toText(GRID_W) # " " # Nat.toText(GRID_H) #
         "\" preserveAspectRatio=\"xMidYMid meet\">";
+
+        // A11y / nicer filenames when saved from browsers
+        svg #= "<title>" # title # "</title>";
 
         svg #= "<rect width=\"" # Nat.toText(GRID_W) # "\" height=\"" # Nat.toText(GRID_H) #
         "\" fill=\"" # bgColor # "\" stroke=\"#3b3d5c\" stroke-width=\"0.5\"/>";

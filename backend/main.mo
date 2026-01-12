@@ -26,12 +26,17 @@ persistent actor BonsaiNFT {
     var owner : ?Principal = null;
     var treasuryAccountId : ?Blob = null;
     var treasuryBalance : Nat64 = 0;
+    // Sum of all unclaimed airdrops + their expected ledger fees.
+    // Used to prevent owner withdrawals from funds already owed to users.
+    var treasuryReserved : Nat64 = 0;
     var useLocalhostImageUrl : Bool = false;
     var testMode : Bool = false; // When true, skip payment verification for testing
 
     // --- Leaderboard State --------------------------------------------------
     var completedRounds : [Types.LeaderboardRound] = [];
     var claimedDistributions : [(Nat, [Principal])] = [];
+    // Prevent double-claims while a ledger transfer is in flight.
+    var pendingClaims : [(Nat, [Principal])] = [];
 
     // --- Trusted Origins State ----------------------------------------------
     var trustedOrigins : [Text] = [
@@ -107,6 +112,45 @@ persistent actor BonsaiNFT {
 
         // Reinitialize NFT manager with current settings
         nftManager := NFTManager.NFTManager(storage, canisterId, useLocalhostImageUrl);
+
+        // After upgrades, rebuild the reserved amount from persisted rounds/claims.
+        // Also clear any in-flight claims (they can't safely survive an upgrade).
+        pendingClaims := [];
+        treasuryReserved := recomputeTreasuryReserved();
+    };
+
+    private func recomputeTreasuryReserved() : Nat64 {
+        var reserved : Nat64 = 0;
+
+        for (round in completedRounds.vals()) {
+            var claimedForRound : [Principal] = [];
+            for (cd in claimedDistributions.vals()) {
+                if (cd.0 == round.roundId) {
+                    claimedForRound := cd.1;
+                };
+            };
+
+            for (dist in round.distributions.vals()) {
+                var isClaimed = false;
+                for (p in claimedForRound.vals()) {
+                    if (Principal.equal(p, dist.principal)) {
+                        isClaimed := true;
+                    };
+                };
+
+                if (not isClaimed) {
+                    reserved := reserved + dist.amount + ledgerHelper.LEDGER_FEE;
+                };
+            };
+        };
+
+        reserved;
+    };
+
+    private func treasuryAvailable() : Nat64 {
+        if (treasuryBalance > treasuryReserved) {
+            treasuryBalance - treasuryReserved;
+        } else { 0 };
     };
 
     // ========================================================================
@@ -194,10 +238,11 @@ persistent actor BonsaiNFT {
                         if (active) {
                             // Check if round has ended and needs processing
                             let previousRoundEndTime = getPreviousRoundEndTime();
-                            let (result, newStartTime, newTreasuryBalance, newCompletedRounds, newClaimedDistributions, newRoundActive, newRoundId) = leaderBoardHelper.processAirdropIfReady(
+                            let (result, newStartTime, newTreasuryBalance, newTreasuryReserved, newCompletedRounds, newClaimedDistributions, newRoundActive, newRoundId) = leaderBoardHelper.processAirdropIfReady(
                                 startTime,
                                 previousRoundEndTime,
                                 treasuryBalance,
+                                treasuryReserved,
                                 completedRounds,
                                 claimedDistributions,
                                 active,
@@ -208,6 +253,7 @@ persistent actor BonsaiNFT {
                                 case (#Ok(_)) {
                                     roundManager.setRoundState(newRoundId, newStartTime, newRoundActive);
                                     treasuryBalance := newTreasuryBalance;
+                                    treasuryReserved := newTreasuryReserved;
                                     completedRounds := newCompletedRounds;
                                     claimedDistributions := newClaimedDistributions;
                                 };
@@ -367,9 +413,11 @@ persistent actor BonsaiNFT {
             return #Err("Destination must be a 32-byte account identifier");
         };
 
-        // Ensure sufficient balance
-        if (amount > treasuryBalance) {
-            return #Err("Insufficient treasury balance");
+        let totalDebit = amount + ledgerHelper.LEDGER_FEE;
+
+        // Ensure sufficient AVAILABLE balance (don't withdraw funds owed to winners)
+        if (totalDebit > treasuryAvailable()) {
+            return #Err("Insufficient available treasury balance");
         };
 
         // Use ICP Ledger transfer format (not ICRC-7)
@@ -386,7 +434,7 @@ persistent actor BonsaiNFT {
         switch (result) {
             case (#Ok(blockIndex)) {
                 // Update treasury balance after successful withdrawal
-                treasuryBalance -= amount;
+                treasuryBalance -= totalDebit;
                 #Ok(blockIndex);
             };
             case (#Err(_e)) {
@@ -515,7 +563,7 @@ persistent actor BonsaiNFT {
     public query func getCurrentLeaderboard() : async Types.CurrentLeaderboard {
         let (roundId, startTime, active) = roundManager.getRoundState();
         let previousRoundEndTime = getPreviousRoundEndTime();
-        leaderBoardHelper.getCurrentLeaderboard(roundId, startTime, previousRoundEndTime, active, treasuryBalance);
+        leaderBoardHelper.getCurrentLeaderboard(roundId, startTime, previousRoundEndTime, active, treasuryBalance, treasuryReserved);
     };
 
     // Get completed rounds with pagination
@@ -531,10 +579,11 @@ persistent actor BonsaiNFT {
     public shared (_msg) func processAirdropIfReady() : async Types.Result<Text, Text> {
         let (roundId, startTime, active) = roundManager.getRoundState();
         let previousRoundEndTime = getPreviousRoundEndTime();
-        let (result, newStartTime, newTreasuryBalance, newCompletedRounds, newClaimedDistributions, newRoundActive, newRoundId) = leaderBoardHelper.processAirdropIfReady(
+        let (result, newStartTime, newTreasuryBalance, newTreasuryReserved, newCompletedRounds, newClaimedDistributions, newRoundActive, newRoundId) = leaderBoardHelper.processAirdropIfReady(
             startTime,
             previousRoundEndTime,
             treasuryBalance,
+            treasuryReserved,
             completedRounds,
             claimedDistributions,
             active,
@@ -545,6 +594,7 @@ persistent actor BonsaiNFT {
             case (#Ok(_)) {
                 roundManager.setRoundState(newRoundId, newStartTime, newRoundActive);
                 treasuryBalance := newTreasuryBalance;
+                treasuryReserved := newTreasuryReserved;
                 completedRounds := newCompletedRounds;
                 claimedDistributions := newClaimedDistributions;
             };
@@ -561,17 +611,144 @@ persistent actor BonsaiNFT {
     };
 
     public shared (msg) func claimAirdrop(roundId : Nat, accountId : Blob) : async Types.Result<Nat64, Text> {
-        let (result, newClaimedDistributions, newTreasuryBalance) = await leaderBoardHelper.claimAirdrop(
-            roundId,
-            completedRounds,
-            claimedDistributions,
-            msg.caller,
-            accountId,
-            treasuryBalance,
-        );
-        claimedDistributions := newClaimedDistributions;
-        treasuryBalance := newTreasuryBalance;
-        result;
+        // Validate destination is proper account identifier format
+        if (accountId.size() != 32) {
+            return #Err("Destination must be a 32-byte account identifier");
+        };
+
+        // Find distribution for caller in the requested round
+        var distOpt : ?Types.AirdropDistribution = null;
+        label findDist for (r in completedRounds.vals()) {
+            if (r.roundId == roundId) {
+                for (d in r.distributions.vals()) {
+                    if (Principal.equal(d.principal, msg.caller)) {
+                        distOpt := ?d;
+                        break findDist;
+                    };
+                };
+                break findDist;
+            };
+        };
+
+        let dist = switch (distOpt) {
+            case (null) { return #Err("No distribution for caller") };
+            case (?d) { d };
+        };
+
+        // Check if already claimed
+        for (cd in claimedDistributions.vals()) {
+            if (cd.0 == roundId) {
+                for (p in cd.1.vals()) {
+                    if (Principal.equal(p, msg.caller)) {
+                        return #Err("Already claimed");
+                    };
+                };
+            };
+        };
+
+        // Check if there's an in-flight claim
+        for (pc in pendingClaims.vals()) {
+            if (pc.0 == roundId) {
+                for (p in pc.1.vals()) {
+                    if (Principal.equal(p, msg.caller)) {
+                        return #Err("Claim already in progress");
+                    };
+                };
+            };
+        };
+
+        let totalDebit : Nat64 = dist.amount + ledgerHelper.LEDGER_FEE;
+
+        // Ensure balances are sufficient BEFORE awaiting ledger.
+        if (treasuryBalance < totalDebit) {
+            return #Err("Insufficient treasury balance");
+        };
+
+        if (treasuryReserved < totalDebit) {
+            treasuryReserved := recomputeTreasuryReserved();
+            if (treasuryReserved < totalDebit) {
+                return #Err("Insufficient reserved balance");
+            };
+        };
+
+        // Mark claim as pending (prevents concurrent double-claim)
+        do {
+            var found = false;
+            var out : [(Nat, [Principal])] = [];
+            for (pc in pendingClaims.vals()) {
+                if (pc.0 == roundId) {
+                    out := Array.append<(Nat, [Principal])>(out, [(pc.0, Array.append<Principal>(pc.1, [msg.caller]))]);
+                    found := true;
+                } else {
+                    out := Array.append<(Nat, [Principal])>(out, [pc]);
+                };
+            };
+            if (not found) {
+                out := Array.append<(Nat, [Principal])>(out, [(roundId, [msg.caller])]);
+            };
+            pendingClaims := out;
+        };
+
+        let transferArgs : Types.TransferArgsLedger = {
+            memo = 0;
+            amount = { e8s = dist.amount };
+            fee = { e8s = ledgerHelper.LEDGER_FEE };
+            from_subaccount = null;
+            to = accountId;
+            created_at_time = null;
+        };
+
+        let transferRes = await ledger().transfer(transferArgs);
+
+        // Always clear pending marker
+        do {
+            var out : [(Nat, [Principal])] = [];
+            for (pc in pendingClaims.vals()) {
+                if (pc.0 == roundId) {
+                    var newPs : [Principal] = [];
+                    for (p in pc.1.vals()) {
+                        if (not Principal.equal(p, msg.caller)) {
+                            newPs := Array.append<Principal>(newPs, [p]);
+                        };
+                    };
+                    out := Array.append<(Nat, [Principal])>(out, [(pc.0, newPs)]);
+                } else {
+                    out := Array.append<(Nat, [Principal])>(out, [pc]);
+                };
+            };
+            pendingClaims := out;
+        };
+
+        switch (transferRes) {
+            case (#Ok(_blockIndex)) {
+                // Mark claimed
+                do {
+                    var found = false;
+                    var out : [(Nat, [Principal])] = [];
+                    for (cd in claimedDistributions.vals()) {
+                        if (cd.0 == roundId) {
+                            out := Array.append<(Nat, [Principal])>(out, [(cd.0, Array.append<Principal>(cd.1, [msg.caller]))]);
+                            found := true;
+                        } else {
+                            out := Array.append<(Nat, [Principal])>(out, [cd]);
+                        };
+                    };
+                    if (not found) {
+                        out := Array.append<(Nat, [Principal])>(out, [(roundId, [msg.caller])]);
+                    };
+                    claimedDistributions := out;
+                };
+
+                // Deduct from tracked treasury (amount + fee)
+                treasuryBalance -= totalDebit;
+                treasuryReserved -= totalDebit;
+
+                return #Ok(dist.amount);
+            };
+            case (#Err(_e)) {
+                return #Err("Ledger transfer failed");
+            };
+        };
     };
 
     public query func getClaimedPrincipals(roundId : Nat) : async [Principal] {
@@ -676,7 +853,7 @@ persistent actor BonsaiNFT {
 
                 ?{
                     tokenId = nft.tokenId;
-                    name = "Bonsai #" # Nat.toText(nft.tokenId);
+                    name = nft.name;
                     description = "A unique procedurally-generated bonsai tree NFT. Water it to watch it grow!";
                     image = imageUrl;
                     properties = {

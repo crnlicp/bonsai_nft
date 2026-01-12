@@ -12,7 +12,7 @@ const Metadata = (({ bonsai }: BonsaiViewerProps) => {
 
     return (
         <div className="card">
-            <h2 className="text-2xl font-bold mb-4">Bonsai #{Number(bonsai.tokenId)}</h2>
+            <h2 className="text-2xl font-bold mb-4">{bonsai.name || `Bonsai #${Number(bonsai.tokenId)}`}</h2>
 
             <div className="space-y-3 font-mono text-sm">
                 <div className="flex justify-between">

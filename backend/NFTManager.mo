@@ -8,6 +8,7 @@ import Array "mo:base/Array";
 import Types "Types";
 import StorageManager "StorageManager";
 import BonsaiEngine "BonsaiEngine";
+import BonsaiNames "BonsaiNames";
 
 module {
     public class NFTManager(
@@ -43,13 +44,16 @@ module {
             let growthTips = BonsaiEngine.initializeGrowthTips(digits);
             let growthPixels : [Types.Pixel] = [];
 
+            let displayName = BonsaiNames.displayName(tokenId, timestamp);
+
             // React behavior: growth pixels start empty; base pixels are added during SVG generation.
-            let svg = BonsaiEngine.buildOptimizedSVG(initialBalance, growthPixels);
+            let svg = BonsaiEngine.buildOptimizedSVG(initialBalance, growthPixels, displayName);
 
             // Create NFT
             let nft : Types.BonsaiNFT = {
                 tokenId = tokenId;
                 owner = caller;
+                name = displayName;
                 growthSteps = 0;
                 mintedAt = timestamp;
                 lastWatered = timestamp;
@@ -84,11 +88,12 @@ module {
 
                     let digits = BonsaiEngine.getGrowthDigits(currentBalanceICP);
                     let stepResult = BonsaiEngine.growTreeStep(digits, nft.growthPixels, nft.growthTips, nft.growthSteps);
-                    let svg = BonsaiEngine.buildOptimizedSVG(currentBalanceICP, stepResult.pixels);
+                    let svg = BonsaiEngine.buildOptimizedSVG(currentBalanceICP, stepResult.pixels, nft.name);
 
                     let updatedNFT = {
                         tokenId = nft.tokenId;
                         owner = nft.owner;
+                        name = nft.name;
                         growthSteps = stepResult.stepCount;
                         mintedAt = nft.mintedAt;
                         lastWatered = Time.now();
@@ -174,7 +179,7 @@ module {
 
             {
                 tokenId = nft.tokenId;
-                name = "Bonsai #" # Nat.toText(nft.tokenId);
+                name = nft.name;
                 description = "A unique procedurally-generated bonsai tree NFT. Water it to watch it grow!";
                 image = imageUrl;
                 properties = {

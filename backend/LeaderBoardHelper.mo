@@ -81,6 +81,7 @@ module {
             previousRoundEndTime : Int,
             roundActive : Bool,
             treasuryBalance : Nat64,
+            treasuryReserved : Nat64,
         ) : Types.CurrentLeaderboard {
             if (not roundActive) {
                 return {
@@ -115,7 +116,10 @@ module {
                 },
             );
 
-            let airdropAmount = Nat64.div(Nat64.mul(treasuryBalance, Nat64.fromNat(10)), Nat64.fromNat(100));
+            let availableTreasury = if (treasuryBalance > treasuryReserved) {
+                Nat64.sub(treasuryBalance, treasuryReserved);
+            } else { Nat64.fromNat(0) };
+            let airdropAmount = Nat64.div(Nat64.mul(availableTreasury, Nat64.fromNat(10)), Nat64.fromNat(100));
 
             {
                 roundId = currentRoundId;
@@ -176,6 +180,7 @@ module {
             currentRoundStart : Int,
             previousRoundEndTime : Int,
             treasuryBalance : Nat64,
+            treasuryReserved : Nat64,
             completedRounds : [Types.LeaderboardRound],
             claimedDistributions : [(Nat, [Principal])],
             roundActive : Bool,
@@ -183,6 +188,7 @@ module {
         ) : (
             Types.Result<Text, Text>,
             Int,
+            Nat64,
             Nat64,
             [Types.LeaderboardRound],
             [(Nat, [Principal])],
@@ -195,6 +201,7 @@ module {
                     #Err("No active round to process"),
                     currentRoundStart,
                     treasuryBalance,
+                    treasuryReserved,
                     completedRounds,
                     claimedDistributions,
                     roundActive,
@@ -210,6 +217,7 @@ module {
                     #Err("Round has not ended yet"),
                     currentRoundStart,
                     treasuryBalance,
+                    treasuryReserved,
                     completedRounds,
                     claimedDistributions,
                     roundActive,
@@ -226,6 +234,7 @@ module {
                     #Ok("No users to distribute airdrop to. Round remains open."),
                     currentRoundStart,
                     treasuryBalance,
+                    treasuryReserved,
                     completedRounds,
                     claimedDistributions,
                     roundActive,
@@ -253,8 +262,34 @@ module {
                 },
             );
 
-            // Calculate airdrop total (10% of treasury) using integer arithmetic
-            let airdropTotal = Nat64.div(Nat64.mul(treasuryBalance, Nat64.fromNat(10)), Nat64.fromNat(100));
+            let winners : Nat = top10.size();
+
+            let availableTreasury = if (treasuryBalance > treasuryReserved) {
+                Nat64.sub(treasuryBalance, treasuryReserved);
+            } else { Nat64.fromNat(0) };
+
+            // Reserve enough for claim fees so we don't end up owing transfers we can't execute.
+            let totalFees : Nat64 = Nat64.mul(ledgerHelper.LEDGER_FEE, Nat64.fromNat(winners));
+            if (availableTreasury <= totalFees) {
+                return (
+                    #Err("Treasury insufficient to cover claim fees"),
+                    currentRoundStart,
+                    treasuryBalance,
+                    treasuryReserved,
+                    completedRounds,
+                    claimedDistributions,
+                    roundActive,
+                    currentRoundId,
+                );
+            };
+
+            let availableAfterFees : Nat64 = Nat64.sub(availableTreasury, totalFees);
+
+            // Calculate airdrop total (10% of available treasury), capped so (airdrop + fees) fits.
+            var airdropTotal = Nat64.div(Nat64.mul(availableTreasury, Nat64.fromNat(10)), Nat64.fromNat(100));
+            if (airdropTotal > availableAfterFees) {
+                airdropTotal := availableAfterFees;
+            };
 
             // Distribution percentages for top 10 (sum = 100%) expressed as integer percentages
             // 1st: 22%, 2nd: 18%, 3rd: 14%, 4th: 11%, 5th: 9%, 6th: 8%, 7th: 7%, 8th: 5%, 9th: 4%, 10th: 2%
@@ -262,8 +297,6 @@ module {
 
             var distributions : [Types.AirdropDistribution] = [];
             var totalDistributed : Nat64 = 0;
-
-            let winners : Nat = top10.size();
 
             // Calculate total percentage for actual number of winners
             var totalPercentForWinners : Nat = 0;
@@ -342,10 +375,15 @@ module {
             // Initialize claimed list for this round
             let newClaimedDistributions = Array.append<(Nat, [Principal])>(claimedDistributions, [(completedRound.roundId, [])]);
 
+            // Reserve the owed payout + fees immediately.
+            let reservedIncrement : Nat64 = Nat64.add(totalDistributed, totalFees);
+            let newTreasuryReserved : Nat64 = Nat64.add(treasuryReserved, reservedIncrement);
+
             (
                 #Ok("Airdrop processed successfully. Round " # Nat.toText(completedRound.roundId) # " completed. " # Nat64.toText(totalDistributed) # " e8s distributed."),
                 newCurrentRoundStart,
                 treasuryBalance,
+                newTreasuryReserved,
                 newCompletedRounds,
                 newClaimedDistributions,
                 newRoundActive,

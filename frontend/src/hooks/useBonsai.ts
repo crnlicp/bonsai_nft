@@ -10,6 +10,7 @@ const WATER_COST = BigInt(1_111_000); // 0.01111000 ICP (fixed cost for regular 
 
 export interface BonsaiNFT {
     tokenId: bigint;
+    name: string;
     owner: string;
     growthSteps: bigint;
     mintedAt: bigint;

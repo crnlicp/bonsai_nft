@@ -153,6 +153,7 @@ module {
     public type BonsaiNFT = {
         tokenId : Nat;
         owner : Principal;
+        name : Text;
         growthSteps : Nat;
         mintedAt : Int;
         lastWatered : Int;

@@ -5,6 +5,7 @@ import Iter "mo:base/Iter";
 import Types "Types";
 import NFTManager "NFTManager";
 import HelperFunctions "HelperFunctions";
+import BonsaiNames "BonsaiNames";
 
 module {
     // ============================================
@@ -31,9 +32,14 @@ module {
                 case (?tokenId) {
                     switch (nftManager.getBonsaiDetails(tokenId)) {
                         case (?nft) {
+                            let fileName = BonsaiNames.svgFileName(nft.tokenId, nft.mintedAt);
                             return {
                                 status_code = 200;
-                                headers = [("Content-Type", "image/svg+xml"), ("Cache-Control", "no-cache")];
+                                headers = [
+                                    ("Content-Type", "image/svg+xml"),
+                                    ("Cache-Control", "no-cache"),
+                                    ("Content-Disposition", "inline; filename=\"" # fileName # "\""),
+                                ];
                                 body = Text.encodeUtf8(nft.cachedSVG);
                                 streaming_strategy = null;
                             };

@@ -92,6 +92,7 @@ module {
                     let updatedNFT = {
                         tokenId = nft.tokenId;
                         owner = to;
+                        name = nft.name;
                         growthSteps = nft.growthSteps;
                         mintedAt = nft.mintedAt;
                         lastWatered = nft.lastWatered;

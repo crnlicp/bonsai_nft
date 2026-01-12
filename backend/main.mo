@@ -502,10 +502,18 @@ persistent actor BonsaiNFT {
             active,
             roundId,
         );
-        roundManager.setRoundState(newRoundId, newStartTime, newRoundActive);
-        treasuryBalance := newTreasuryBalance;
-        completedRounds := newCompletedRounds;
-        claimedDistributions := newClaimedDistributions;
+        // Only update state if the result is successful (airdrop was processed or no users case)
+        switch (result) {
+            case (#Ok(_)) {
+                roundManager.setRoundState(newRoundId, newStartTime, newRoundActive);
+                treasuryBalance := newTreasuryBalance;
+                completedRounds := newCompletedRounds;
+                claimedDistributions := newClaimedDistributions;
+            };
+            case (#Err(_)) {
+                // Don't update state on errors (round not ended, no active round, etc.)
+            };
+        };
         result;
     };
 

@@ -189,6 +189,19 @@ module {
             Bool,
             Nat,
         ) {
+            // Check if there's an active round first
+            if (not roundActive) {
+                return (
+                    #Err("No active round to process"),
+                    currentRoundStart,
+                    treasuryBalance,
+                    completedRounds,
+                    claimedDistributions,
+                    roundActive,
+                    currentRoundId,
+                );
+            };
+
             let now = Time.now();
             let endTime = currentRoundStart + ROUND_DURATION;
 
@@ -208,18 +221,15 @@ module {
             let userScores = calculateUserScores(previousRoundEndTime, endTime, roundActive);
 
             if (userScores.size() == 0) {
-                // No users: close the round but do not start a new one until a new bonsai is minted
-                let newRoundActive = false;
-                let newCurrentRoundStart : Int = 0;
-                let newCurrentRoundId = Nat.add(currentRoundId, 1);
+                // No users: keep the round open, do not close or increment round number
                 return (
-                    #Ok("No users to distribute airdrop to. Round closed; new round will start when a bonsai is minted."),
-                    newCurrentRoundStart,
+                    #Ok("No users to distribute airdrop to. Round remains open."),
+                    currentRoundStart,
                     treasuryBalance,
                     completedRounds,
                     claimedDistributions,
-                    newRoundActive,
-                    newCurrentRoundId,
+                    roundActive,
+                    currentRoundId,
                 );
             };
 

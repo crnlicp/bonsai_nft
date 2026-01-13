@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom';
 const About = () => {
     return (
         <div className="max-w-4xl mx-auto px-4 py-8">
-            <h1 className="text-4xl font-bold mb-8">About Bonsai NFT</h1>
+            <h1 className="text-4xl font-bold mb-8">About ICP Bonsai NFT</h1>
 
             {/* What is Bonsai NFT */}
             <section className="card mb-8">
-                <h2 className="text-2xl font-bold mb-4 text-primary">🌳 What is Bonsai NFT?</h2>
+                <h2 className="text-2xl font-bold mb-4 text-primary">🌳 What is ICP Bonsai NFT?</h2>
                 <p className="text-gray-300 mb-4">
-                    Bonsai NFT is a fully on-chain, dynamic NFT platform built on the Internet Computer blockchain.
+                    ICP Bonsai NFT is a fully on-chain, dynamic NFT platform built on the Internet Computer blockchain.
                     Each bonsai tree is a unique, living digital art piece that grows and evolves over time based on
                     your interactions and wallet balance.
                 </p>
@@ -128,7 +128,7 @@ const About = () => {
                     </div>
 
                     <div>
-                        <h3 className="text-xl font-semibold mb-2 text-secondary">Growth Algorithm Process</h3>
+                        <h3 className="text-xl font-semibold mb-2 text-secondary">🌳 Growth Algorithm Process</h3>
                         <p className="text-gray-300 mb-3">
                             When you water your bonsai, the algorithm executes one growth step:
                         </p>
@@ -269,7 +269,7 @@ const About = () => {
 
                 <div className="space-y-4">
                     <p className="text-gray-300">
-                        Bonsai NFT supports all major Internet Computer wallets including:
+                        ICP Bonsai NFT supports all major Internet Computer wallets including:
                     </p>
 
                     <div className="grid md:grid-cols-2 gap-4">
@@ -308,7 +308,6 @@ const About = () => {
                     </div>
                 </div>
             </section>
-
             {/* Get Started */}
             <div className="text-center mt-8">
                 <Link to="/" className="btn-primary inline-block px-8 py-3 text-lg">

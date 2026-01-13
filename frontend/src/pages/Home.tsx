@@ -5,6 +5,8 @@ import { useIdentityKitAuth } from '../hooks/useIdentityKitAuth';
 import { useBonsai } from '../hooks/useBonsai';
 import { useBalance } from '../hooks/useBalance';
 import WalletConnect from '../components/WalletConnect';
+import logo from '../assets/logo-bg.png';
+
 
 const Home = () => {
     const navigate = useNavigate();
@@ -37,9 +39,16 @@ const Home = () => {
     return (
         <>
             {/* Hero Section */}
+            <div className="max-w-4xl mx-auto px-4 pt-8 text-center">
+                <img
+                    src={logo}
+                    alt="ICP Bonsai NFT Logo"
+                    className="mx-auto w-40 h-40"
+                />
+            </div>
             <div className="max-w-4xl mx-auto px-4 py-16 text-center">
                 <h2 className="text-5xl font-bold mb-6">
-                    Grow Your Digital Bonsai
+                    🌳 Grow Your Digital Bonsai
                 </h2>
                 <p className="text-xl text-gray-400 mb-8">
                     Mint a unique, procedurally-generated bonsai tree NFT on the Internet Computer.

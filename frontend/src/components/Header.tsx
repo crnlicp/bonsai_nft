@@ -4,6 +4,7 @@ import { useIdentityKitAuth } from '../hooks/useIdentityKitAuth';
 import { useBonsai } from '../hooks/useBonsai';
 import WalletConnect from './WalletConnect';
 import UserMenu from './UserMenu';
+import logo from '../assets/logo-bg.png';
 
 const Header = () => {
     const { isAuthenticated } = useIdentityKitAuth();
@@ -25,8 +26,17 @@ const Header = () => {
             )}
             <div className="max-w-7xl mx-auto px-4 py-4">
                 <div className="flex justify-between items-center">
-                    <Link to="/" className="text-2xl font-bold text-primary">
-                        🌳 Bonsai NFT
+                    <Link to="/" className="text-2xl font-bold text-primary flex items-center">
+                        <div className="px-4 inline-block">
+                            <img
+                                src={logo}
+                                alt="ICP Bonsai NFT Logo"
+                                className="mx-auto w-16 h-16"
+                            />
+                        </div>
+                        <div className="inline-block">
+                            ICP Bonsai NFT
+                        </div>
                     </Link>
 
                     {/* Desktop Navigation */}

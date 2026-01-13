@@ -198,7 +198,7 @@ module {
         // ============================================
 
         public func icrc7_name() : Text {
-            "Bonsai NFT";
+            "ICP Bonsai NFT";
         };
 
         public func icrc7_symbol() : Text {
